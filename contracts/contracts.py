@@ -1,24 +1,24 @@
-# contracts/contract.py
-from dataclasses import dataclass
-from typing import Dict
-from utils import PayoffCalculator
+from __future__ import annotations
 
-@dataclass
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
 class Contract:
-    """Contract objects with fees and parameters."""
-    name: str          # 'c_Y' or 'c_S'
-    F: float           # Fixed fee
-    gamma: float       # Usage coefficient
-    tau: float         # Success contingent
-    M: float           # Maintenance per period
-    kappa: float       # Switching friction
-    
-    def expected_profit(self, v_sigma: float, C: float) -> float:
-        """Firm expected profit under this contract."""
-        P_c = self.F + self.gamma * v_sigma * (1 + self.kappa)
-        return PayoffCalculator.firm_profit(P_c, C)
-    
-    def hospital_utility(self, v_sigma: float, beta_h: float, delta_h: float) -> float:
-        """Hospital adoption utility h_{\sigma c A}."""
-        P_c = self.F + self.gamma * v_sigma * (1 + self.kappa)
-        return PayoffCalculator.hospital_adoption
+    """Two contracts from the thesis: c_Y and c_S."""
+
+    name: str
+    fixed_price: float | None = None
+    gamma: float | None = None
+
+    def price(self, signal: str, v_bar: float, delta_v: float) -> float:
+        if self.name == "c_Y":
+            if self.fixed_price is None:
+                raise ValueError("c_Y requires a fixed price.")
+            return self.fixed_price
+        if self.name == "c_S":
+            if self.gamma is None:
+                raise ValueError("c_S requires gamma.")
+            value = v_bar + delta_v if signal == "sigma_L" else v_bar
+            return self.gamma * value
+        raise ValueError(f"Unknown contract {self.name!r}")

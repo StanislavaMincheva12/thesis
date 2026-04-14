@@ -1,74 +1,128 @@
-# agents/hospital.py
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Literal, Optional
-import numpy as np
-from contracts.contract import Contract
+from typing import Dict, Literal
+
+from contracts.contracts import Contract
 from utils import PayoffCalculator
+
+
+Action = Literal["Try", "Delay", "Reject"]
+
 
 @dataclass
 class Hospital:
-    """Hospital agent with behavioral biases from Stage 1."""
-    sigma: str  # 'L' or 'H' (low/high bias)
-    beta_h: float  # Present bias (h < 1)
-    delta_h: float  # Impatience (h < 1)
-    v_bar: float    # Baseline technology value
-    Delta_v: float  # Value differential L vs H
-    size: str       # 'small' or 'large' (affects switching costs)
-    ownership: str  # 'private' or 'community' (affects risk aversion)
-    id: int         # Unique ID for tracking
-    adopted: bool = False
-    trial_cost: float = 0.1  # ctrial from thesis
-    
-    def get_v_sigma(self) -> float:
-        """Technology value v_σ from thesis."""
-        if self.sigma == 'L':
-            return self.v_bar + self.Delta_v
-        return self.v_bar
-    
-    def adoption_utility(self, contract: Contract) -> float:
-        """h_{σ c A} = β_h δ_h v_σ - P_c (1+κ) from Stage 1."""
-        v_sigma = self.get_v_sigma()
-        P_c = contract.F + contract.gamma * v_sigma * (1 + contract.kappa)
-        return self.beta_h * self.delta_h * v_sigma - P_c * (1 + contract.kappa)
-    
-    def try_utility(self, contract_menu: Dict[str, Contract], p_L: float) -> float:
-        """U_h^{Try} = -c_trial + δ_h² (β_h δ_h - ρ) (v_bar + p_L Δv) from thesis."""
-        # Expected adoption payoff under signal-contingent menu
-        expected_adoption = p_L * self.adoption_utility(contract_menu['c_Y']) + \
-                           (1 - p_L) * self.adoption_utility(contract_menu['c_S'])
-        return -self.trial_cost + (self.delta_h ** 2) * expected_adoption
-    
-    def decide_action(self, 
-                     contract_menu: Dict[str, Contract], 
-                     p_L: float, 
-                     continuation_value: float = 0.0) -> Literal['Try', 'Delay', 'Reject']:
+    """
+    Hospital agent with behavioral and organizational characteristics.
+
+    The thesis model pins down beta_h and delta_h directly. The extra fields
+    `size` and `ownership` help us compare hospital profiles in simulation.
+    """
+
+    name: str
+    beta_h: float
+    delta_h: float
+    kappa: float
+    trial_cost: float
+    size: str
+    ownership: str
+    alpha: float = 0.0
+    mixed_h_lya_override: float | None = None
+
+    def value(self, signal: str, v_bar: float, delta_v: float) -> float:
+        if signal == "sigma_L":
+            return v_bar + delta_v
+        return v_bar
+
+    def rho(self, gamma: float) -> float:
+        return gamma * (1.0 + self.kappa)
+
+    def adoption_payoff(
+        self,
+        signal: str,
+        contract: Contract,
+        v_bar: float,
+        delta_v: float,
+    ) -> float:
+        value = self.value(signal, v_bar, delta_v)
+        price = contract.price(signal=signal, v_bar=v_bar, delta_v=delta_v)
+        return PayoffCalculator.hospital_adoption_utility(
+            value, price, self.kappa, self.beta_h, self.delta_h
+        )
+
+    def h_lya(self, firm_gamma: float, v_bar: float, delta_v: float) -> float:
         """
-        t=0 decision: Try, Delay, or Reject.
-        Hospital chooses Try if U^{Try} > δ_h^4 β_h V_h (delay payoff).
+        Low-signal payoff under c_Y from the thesis:
+        h_LYA is the low-signal surplus when c_Y is offered.
+
+        In the pure-strategy section, Assumption 7 implies:
+        P0 + Pm = gamma * (v_bar + delta_v).
+
+        The mixed-strategy section additionally treats h_LYA as strictly positive
+        at the boundary beta_h * delta_h = rho. Because those two statements are
+        not jointly consistent, the simulation allows an optional override so the
+        intended mixed boundary can still be explored explicitly.
         """
-        U_try = self.try_utility(contract_menu, p_L)
-        U_delay = self.delta_h**4 * self.beta_h * continuation_value
-        
-        if U_try > U_delay:
-            return 'Try'
-        elif U_try < U_delay:
-            return 'Reject'  # Weakly dominated by Delay
-        else:
-            return 'Delay'  # Indifferent
-    
-    def decide_adopt(self, contract: Contract, signal: str) -> bool:
+        if self.mixed_h_lya_override is not None:
+            return self.mixed_h_lya_override
+        rho = self.rho(firm_gamma)
+        return (self.beta_h * self.delta_h - rho) * (v_bar + delta_v)
+
+    def try_payoff(self, gamma: float, p_l: float, v_bar: float, delta_v: float) -> float:
+        rho = self.rho(gamma)
+        return PayoffCalculator.try_utility(
+            c_trial=self.trial_cost,
+            beta_h=self.beta_h,
+            delta_h=self.delta_h,
+            p_l=p_l,
+            delta_v=delta_v,
+            v_bar=v_bar,
+            rho=rho,
+        )
+
+    def continuation_value(self, p_try: float, u_try: float) -> float:
+        return PayoffCalculator.continuation_value(
+            p_try=p_try,
+            u_try=u_try,
+            beta_h=self.beta_h,
+            delta_h=self.delta_h,
+        )
+
+    def pure_strategy_action(self, gamma: float, p_l: float, v_bar: float, delta_v: float) -> Action:
+        u_try = self.try_payoff(gamma=gamma, p_l=p_l, v_bar=v_bar, delta_v=delta_v)
+        if u_try > 0:
+            return "Try"
+        if u_try < 0:
+            return "Delay"
+        return "Try"
+
+    def mixed_boundary_probability(
+        self,
+        gamma: float,
+        p_l: float,
+        v_bar: float,
+        delta_v: float,
+    ) -> float | None:
         """
-        t=3 decision: Adopt or Not after seeing signal and contract.
-        Screening: L accepts c_Y, both accept c_S (pure strategy).
+        Mixed equilibrium at the boundary beta_h * delta_h = rho.
+        q_L* = 1 - c_trial / (delta_h^2 * p_L * h_LYA)
         """
-        utility = self.adoption_utility(contract)
-        return utility > 0
-    
-    def update_state(self, action: str, signal: Optional[str] = None, contract: Optional[Contract] = None):
-        """Update hospital state after action."""
-        if action == 'Adopt':
-            self.adopted = True
-        elif action == 'Try':
-            # Signal is drawn, but hospital state unchanged until t=3
-            pass
-        # Delay/Reject: no state change, retry next period
+        h_lya = self.h_lya(firm_gamma=gamma, v_bar=v_bar, delta_v=delta_v)
+        denominator = (self.delta_h ** 2) * p_l * h_lya
+        if denominator <= 0:
+            return None
+        q_l = 1.0 - self.trial_cost / denominator
+        if 0.0 < q_l < 1.0:
+            return q_l
+        return None
+
+    def summary(self) -> Dict[str, float | str]:
+        return {
+            "name": self.name,
+            "beta_h": self.beta_h,
+            "delta_h": self.delta_h,
+            "kappa": self.kappa,
+            "trial_cost": self.trial_cost,
+            "size": self.size,
+            "ownership": self.ownership,
+        }

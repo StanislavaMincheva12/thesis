@@ -1,0 +1,62 @@
+Stage 1 Firm-Hospital Simulation Report
+=======================================
+
+Simulation Settings
+-------------------
+v_bar: 10.0
+delta_v: 4.0
+p_l: 0.45
+gamma: 0.7
+cost_c: 5.0
+delta_m: 0.95
+loops: 12
+runs: 1000
+seed: 7
+boundary_tolerance: 0.01
+
+Results Interpretation
+----------------------
+The main pattern is that hospitals with lower present bias, lower friction, and lower trial cost are much more likely to adopt.
+
+Low-bias large private: `u_try = 1.381` is positive, so this profile prefers Try immediately. That produces an adoption rate of 1.000 and essentially no long-run delay.
+Moderate-bias large community: `u_try = -0.330` is negative, so Delay dominates Try in the pure-strategy case. That is why adoption is 0.000 and delay is 1.000.
+High-bias small private: `u_try = -1.632` is negative, so Delay dominates Try in the pure-strategy case. That is why adoption is 0.000 and delay is 1.000.
+High-bias small community: `u_try = -2.486` is negative, so Delay dominates Try in the pure-strategy case. That is why adoption is 0.000 and delay is 1.000.
+Boundary mixer: this is the mixed boundary case. `q_l = 0.588` means that after `sigma_L` the firm offers `c_S` with probability 0.588 and `c_Y` otherwise. Adoption still occurs often, but later on average because the game mixes.
+
+How to read the current table
+-----------------------------
+Positive `u_try` means the hospital's discounted expected gain from trying exceeds the trial cost.
+Negative `u_try` means the hospital keeps delaying, so the firm earns zero in those scenarios.
+Higher `avg_firm_payoff` tends to appear exactly where adoption happens more often.
+The mixed row should be read as a boundary illustration rather than a clean calibration, because your mixed-strategy section requires an extra screening-surplus assumption.
+
+Output Variables
+----------------
+hospital: Name of the hospital profile being simulated.
+size: Organizational size assumption used for that profile.
+ownership: Ownership type assumption used for that profile.
+beta_h: Hospital present-bias parameter. Lower values mean the hospital undervalues future benefits more strongly.
+delta_h: Hospital exponential discount factor. Lower values mean the hospital is more impatient over time.
+kappa: Implementation and switching friction applied to contract cost.
+trial_cost: Upfront cost of choosing Try before the signal is realized.
+equilibrium: Whether the simulation is using the pure-strategy case or the mixed-strategy boundary case.
+u_try: The hospital's stage-1 expected utility from choosing Try. Positive means Try is attractive; negative means Delay dominates.
+q_l: In the mixed boundary case, the probability that the firm offers c_S after sigma_L. It is zero in pure-strategy rows.
+adoption_rate: Share of simulation runs in which the hospital eventually adopts within the allowed number of cycles.
+delay_rate: Share of runs in which the hospital delays forever within the simulation horizon.
+avg_cycle_of_adoption: Average cycle in which adoption happens, conditional on adoption occurring.
+avg_hospital_payoff: Average realized hospital payoff from adoption across simulation runs.
+avg_firm_payoff: Average realized firm profit across simulation runs.
+share_c_Y: Share of runs ending with the two-part tariff c_Y being the adopted contract.
+share_c_S: Share of runs ending with the SaaS contract c_S being the adopted contract.
+
+Simulation Output Table
+-----------------------
+hospital                      | size   | ownership | beta_h | delta_h | kappa | trial_cost | equilibrium | u_try  | q_l   | adoption_rate | delay_rate | avg_cycle_of_adoption | avg_hospital_payoff | avg_firm_payoff | share_c_Y | share_c_S
+------------------------------+--------+-----------+--------+---------+-------+------------+-------------+--------+-------+---------------+------------+-----------------------+---------------------+-----------------+-----------+----------
+Low-bias large private        | large  | private   | 0.930  | 0.950   | 0.050 | 0.200      | pure        | 1.381  | 0.000 | 1.000         | 0.000      | 1.000                 | 1.775               | 3.366           | 0.488     | 0.512    
+Moderate-bias large community | large  | community | 0.850  | 0.920   | 0.100 | 0.450      | pure        | -0.330 | 0.000 | 0.000         | 1.000      | 0.000                 | 0.000               | 0.000           | 0.000     | 0.000    
+High-bias small private       | small  | private   | 0.790  | 0.900   | 0.140 | 0.800      | pure        | -1.632 | 0.000 | 0.000         | 1.000      | 0.000                 | 0.000               | 0.000           | 0.000     | 0.000    
+High-bias small community     | small  | community | 0.760  | 0.880   | 0.180 | 1.050      | pure        | -2.486 | 0.000 | 0.000         | 1.000      | 0.000                 | 0.000               | 0.000           | 0.000     | 0.000    
+Boundary mixer                | medium | community | 0.856  | 0.900   | 0.100 | 0.300      | mixed       | -0.300 | 0.588 | 1.000         | 0.000      | 1.482                 | 0.000               | 3.397           | 0.276     | 0.724    
